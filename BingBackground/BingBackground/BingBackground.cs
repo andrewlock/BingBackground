@@ -1,10 +1,16 @@
 ﻿using Microsoft.Win32;
 using Newtonsoft.Json;
 using System;
+using System.Configuration;
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.Drawing.Text;
 using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
+using System.Text;
 using System.Windows.Forms;
 
 namespace BingBackground
@@ -13,8 +19,13 @@ namespace BingBackground
     {
         private static void Main(string[] args)
         {
-            string urlBase = GetBackgroundUrlBase();
+            dynamic jsonObject = DownloadJson();
+            string urlBase = GetBackgroundUrlBase(jsonObject);
             Image background = DownloadBackground(urlBase + GetResolutionExtension(urlBase));
+            if (ShouldAddTextToImage())
+            {
+                AddTextToImage(background, GetBackgroundTitle());
+            }
             SaveBackground(background);
             SetBackground(PicturePosition.Fill);
         }
@@ -35,9 +46,8 @@ namespace BingBackground
         /// Gets the base URL for the Bing Image of the Day
         /// </summary>
         /// <returns>Base URL of the Bing Image of the Day</returns>
-        private static string GetBackgroundUrlBase()
+        private static string GetBackgroundUrlBase(dynamic jsonObject)
         {
-            dynamic jsonObject = DownloadJson();
             return "https://www.bing.com" + jsonObject.images[0].urlbase;
         }
         /// <summary>
@@ -105,23 +115,77 @@ namespace BingBackground
             return Image.FromStream(stream);
         }
         /// <summary>
-        /// Gets the path to My Pictures/Bing Backgrounds/yyyy/M-d-yyyy.bmp
+        /// Gets the path to My Pictures/Bing Backgrounds/yyyy/M-d-yyyy.png
         /// </summary>
-        /// <returns>The path to My Pictures/Bing Backgrounds/yyyy/M-d-yyyy.bmp</returns>
+        /// <returns>The path to My Pictures/Bing Backgrounds/yyyy/M-d-yyyy.png</returns>
         private static string GetBackgroundImagePath()
         {
             string directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Bing Backgrounds", DateTime.Now.Year.ToString());
             Directory.CreateDirectory(directory);
-            return Path.Combine(directory, DateTime.Now.ToString("M-d-yyyy") + ".bmp");
+            return Path.Combine(directory, DateTime.Now.ToString("M-d-yyyy") + ".png");
         }
         /// <summary>
-        /// Saves the Bing Image of the Day to My Pictures/Bing Backgrounds/yyyy/M-d-yyyy.bmp
+        /// Saves the Bing Image of the Day to My Pictures/Bing Backgrounds/yyyy/M-d-yyyy.png
         /// </summary>
         /// <param name="background">The background image to save</param>
         private static void SaveBackground(Image background)
         {
             Console.WriteLine("Saving background...");
-            background.Save(GetBackgroundImagePath(), System.Drawing.Imaging.ImageFormat.Bmp);
+            background.Save(GetBackgroundImagePath(), System.Drawing.Imaging.ImageFormat.Png);
+        }
+
+        private static void AddDescriptionToImage(Image image, string description)
+        {
+            //create a new property item 
+            var newItem = (PropertyItem)FormatterServices.GetUninitializedObject(typeof(PropertyItem));
+            // Change the ID of the PropertyItem. to description
+            newItem.Id = 0x010E;
+            newItem.Value = Encoding.UTF8.GetBytes(description);
+            newItem.Len = newItem.Value.Length;
+            newItem.Type = 1;//byte array
+
+            // Set the PropertyItem for the image.
+            image.SetPropertyItem(newItem);
+        }
+
+        /// <summary>
+        /// Adds the provided image as text to the top left hand corner of the image
+        /// </summary>
+        /// <param name="image">The on which to write text</param>
+        /// <param name="imageDetails">The details to write on the image</param>
+        /// <returns></returns>
+        private static void AddTextToImage(Image image, string imageDetails)
+        {
+            Console.WriteLine("Adding Title to image...");
+            using (Graphics graphics = Graphics.FromImage(image))
+            {
+                // Ensure the best possible quality rendering
+                graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                graphics.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+
+                // Create string formatting options (used for alignment)
+                StringFormat stringFormat = new StringFormat
+                {
+                    Alignment = StringAlignment.Far,
+                    LineAlignment = StringAlignment.Far
+                };
+
+                // Create a rectangle for the whole image that will be displayed
+                Rectangle resolution = Screen.PrimaryScreen.Bounds;
+                int offsetX = Math.Max((image.Width - resolution.Width) / 2, 0);
+                int offsetY = Math.Max((image.Height - resolution.Height) / 2, 0);
+                RectangleF rectangle = new RectangleF(offsetX, offsetY, 
+                    resolution.Width + offsetX / 2, resolution.Height + offsetY / 2);
+
+                graphics.DrawString(imageDetails,
+                    new Font("Calibri", 11, FontStyle.Regular),
+                    new SolidBrush(Color.White),
+                    rectangle,
+                    stringFormat);
+                graphics.Flush();
+            }
         }
         /// <summary>
         /// Different types of PicturePositions to set backgrounds
@@ -184,6 +248,12 @@ namespace BingBackground
             const int UpdateIniFile = 1;
             const int SendWindowsIniChange = 2;
             NativeMethods.SystemParametersInfo(SetDesktopBackground, 0, GetBackgroundImagePath(), UpdateIniFile | SendWindowsIniChange);
+        }
+
+        private static bool ShouldAddTextToImage()
+        {
+            bool value;
+            return bool.TryParse(ConfigurationManager.AppSettings["OverlayImageDetails"], out value) && value;
         }
     }
 }
