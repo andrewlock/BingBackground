@@ -22,10 +22,16 @@ namespace BingBackground
             dynamic jsonObject = DownloadJson();
             string urlBase = GetBackgroundUrlBase(jsonObject);
             Image background = DownloadBackground(urlBase + GetResolutionExtension(urlBase));
+            var backgroundTitle = GetBackgroundTitle();
             if (ShouldAddTextToImage())
             {
-                AddTextToImage(background, GetBackgroundTitle());
+                AddTextToImage(background, backgroundTitle);
             }
+            Console.Write("Title: ");
+            var color = Console.ForegroundColor;
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine(backgroundTitle);
+            Console.ForegroundColor = color;
             SaveBackground(background);
             SetBackground(PicturePosition.Fill);
         }
@@ -176,7 +182,7 @@ namespace BingBackground
                 Rectangle resolution = Screen.PrimaryScreen.Bounds;
                 int offsetX = Math.Max((image.Width - resolution.Width) / 2, 0);
                 int offsetY = Math.Max((image.Height - resolution.Height) / 2, 0);
-                RectangleF rectangle = new RectangleF(offsetX, offsetY, 
+                RectangleF rectangle = new RectangleF(offsetX, offsetY,
                     resolution.Width + offsetX / 2, resolution.Height + offsetY / 2);
 
                 graphics.DrawString(imageDetails,
